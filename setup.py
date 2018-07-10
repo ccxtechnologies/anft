@@ -4,7 +4,7 @@ import sys
 from setuptools import setup
 from setuptools import find_packages
 
-__module__ = 'async-nftables'
+__module__ = 'asyncnft'
 __url__ = 'https://github.com/ccxtechnologies'
 
 __version__ = None
