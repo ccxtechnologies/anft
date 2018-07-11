@@ -1,8 +1,12 @@
 # Copyright: 2018, CCX Technologies
 
+import re
+
 from .nft import nft
 from .chain import Chain
 from .chain import BaseChain
+from .set import Set
+from .counter import Counter
 
 
 class Table:
@@ -89,8 +93,70 @@ class Table:
         await chain.load(flush_existing)
         return chain
 
+    async def set(
+            self,
+            name,
+            type_,
+            flag_constant=False,
+            flag_interval=False,
+            flag_timeout=False,
+            timeout=None,
+            gc_interval=None,
+            elements=None,
+            size=None,
+            policy='performance',
+            auto_merge=False
+    ):
+        """Create a new or load an existing set"""
+
+        set_ = Set(
+                name,
+                self,
+                type_,
+                flag_constant,
+                flag_interval,
+                flag_timeout,
+                timeout,
+                gc_interval,
+                elements,
+                size,
+                policy,
+                auto_merge=False
+        )
+        await set_.load()
+        return set_
+
+    async def counter(self, name):
+        """Create a new (or load an existing) Counter."""
+
+        counter = Counter(name, self)
+        await counter.load()
+        return counter
+
     async def list(self):
         """List all chains and rules of the specified table."""
         return await nft('list', 'table', self.family, self.name)
 
-    #TODO: Add a way to remove all rules that jump to a chain
+    async def remove_rule_jumps(self, chain):
+        """Remove all rules that jump to a chain. (required to clear jumps
+        before deleting a chain)."""
+
+        chain_pattern = re.compile(r"^\s+chain (?P<chain>\w+) {$")
+        jump_pattern = re.compile(
+                r"^\s+jump (?P<chain>\w+) # handle (?P<handle>\d+)$"
+        )
+
+        src_chain = ""
+        listing = await self.list()
+        for line in listing.split('\n'):
+            chain_match = chain_pattern.match(line)
+            if chain_match:
+                src_chain = chain_match['chain']
+                continue
+
+            jump_match = jump_pattern.match(line)
+            if jump_match and (jump_match['chain'] == chain.name):
+                await nft(
+                        'delete', 'rule', self.family, self.name, src_chain,
+                        'handle', jump_match['handle']
+                )

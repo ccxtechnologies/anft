@@ -29,7 +29,7 @@ class Rule:
                 self.statement
         )
 
-        self.handle = int(response.split('# handle ')[-1])
+        self.handle = int(response.split('\n')[0].split('# handle ')[-1])
 
     async def append(self):
         """Add the rule at the bottom of the chain."""

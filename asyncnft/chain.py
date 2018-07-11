@@ -15,6 +15,7 @@ class Chain:
         self.name = name
         self.table = table.name
         self.family = table.family
+        self._table = table
 
     async def load(self, flush_existing=False):
         """Load the chain, must be called before calling any other methods.
@@ -46,6 +47,7 @@ class Chain:
             raise RuntimeError(f"Chain {self.name} hasn't been loaded.")
 
         await self.flush()
+        await self._table.remove_rule_jumps(self)
         await nft('delete', 'chain', self.family, self.table, self.name)
 
         self.initialized = False
