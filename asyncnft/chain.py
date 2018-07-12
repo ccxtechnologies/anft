@@ -66,7 +66,10 @@ class Chain:
         """Append rule at the bottom of the chain."""
 
         rule = Rule(statement, self)
-        await rule.insert()
+        await rule.append()
+
+    def __str__(self):
+        return self.name
 
 
 class BaseChain(Chain):

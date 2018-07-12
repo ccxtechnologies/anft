@@ -160,3 +160,6 @@ class Table:
                         'delete', 'rule', self.family, self.name, src_chain,
                         'handle', jump_match['handle']
                 )
+
+    def __str__(self):
+        return self.name
