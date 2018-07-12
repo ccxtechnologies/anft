@@ -105,7 +105,8 @@ class Table:
             elements=None,
             size=None,
             policy='performance',
-            auto_merge=False
+            auto_merge=False,
+            flush_existing=False
     ):
         """Create a new or load an existing set"""
 
@@ -123,7 +124,7 @@ class Table:
                 policy,
                 auto_merge=False
         )
-        await set_.load()
+        await set_.load(flush_existing)
         return set_
 
     async def counter(self, name):

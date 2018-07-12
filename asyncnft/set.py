@@ -67,7 +67,7 @@ class Set:
         if auto_merge:
             self.config.append(f"auto-merge;")
 
-    async def load(self):
+    async def load(self, flush_existing=False):
         """Load the set, must be called before calling any other methods."""
 
         if self.initialized:
@@ -77,6 +77,9 @@ class Set:
                 'add', 'set', self.family, self.table, self.name,
                 f"{{ {' '.join(self.config)} }}"
         )
+
+        if flush_existing:
+            self.flush()
 
         self.initialized = True
 
