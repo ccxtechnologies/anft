@@ -61,12 +61,14 @@ class Chain:
 
         rule = Rule(statement, self)
         await rule.insert()
+        return rule
 
     async def append_rule(self, statement):
         """Append rule at the bottom of the chain."""
 
         rule = Rule(statement, self)
         await rule.append()
+        return rule
 
     def __str__(self):
         return self.name
