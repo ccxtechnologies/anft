@@ -127,11 +127,11 @@ class Table:
         await set_.load(flush_existing)
         return set_
 
-    async def counter(self, name):
+    async def counter(self, name, flush_existing=False):
         """Create a new (or load an existing) Counter."""
 
         counter = Counter(name, self)
-        await counter.load()
+        await counter.load(flush_existing)
         return counter
 
     async def list(self):

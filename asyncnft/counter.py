@@ -1,6 +1,11 @@
 # Copyright: 2018, CCX Technologies
 
+import re
 from .nft import nft
+
+counter_match = re.compile(
+        r"\spackets\s+(?P<packets>\d+)\s+bytes\s+(?P<bytes>\d+)"
+)
 
 
 class Counter:
@@ -19,13 +24,16 @@ class Counter:
         self.table = table.name
         self.family = table.family
 
-    async def load(self):
+    async def load(self, flush_existing=False):
         """Load the set, must be called before calling any other methods."""
 
         if self.initialized:
             return
 
         await nft('add', 'counter', self.family, self.table, self.name)
+
+        if flush_existing:
+            await self.reset()
 
         self.initialized = True
 
@@ -40,7 +48,16 @@ class Counter:
 
     async def get(self):
         """Get the value of the counter."""
-        return await nft('list', 'counter', self.family, self.table, self.name)
+        value = await nft(
+                'list', 'counter', self.family, self.table, self.name
+        )
+        try:
+            return {
+                    k: int(v)
+                    for k, v in counter_match.search(value).groupdict().items()
+            }
+        except AttributeError:
+            return None
 
     async def reset(self):
         """Reset the counter."""
@@ -52,4 +69,4 @@ class Counter:
         if not self.initialized:
             raise RuntimeError(f"Counter {self.name} hasn't been loaded.")
 
-        return f"counter {self.name}"
+        return f"counter name {self.name}"
