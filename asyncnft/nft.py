@@ -3,7 +3,11 @@
 import asyncio
 
 
-async def nft(*command):
+async def nft(*command, loop=0):
+
+    if loop > 10:
+        raise RuntimeError("To many unknown errors")
+
     process = await asyncio.create_subprocess_exec(
             'nft',
             '--echo',
@@ -14,20 +18,16 @@ async def nft(*command):
     )
     stdout, stderr = await process.communicate()
 
-    if process.returncode:
+    if process.returncode == 1:
+        await nft(*command, loop=loop+1)
+
+    elif process.returncode:
         if b'File exists' in stderr:
             raise FileExistsError()
         else:
             raise RuntimeError(
-                    f"Command {' '.join(command)} failed:"
-                    f"\n{stderr.decode()}"
+                    f"Command {' '.join(command)} failed {process.returncode}:"
+                    f"\n{stderr.decode()}\n{stdout.decode()}"
             )
-
-    # I hate having to do this but the nft process
-    # will sometimes complete and add before the
-    # add is complete in the kernel, so if you
-    # try to operate on the new item it will fail.
-    if command[0] == 'add':
-        await asyncio.sleep(0.5)
 
     return stdout.decode()

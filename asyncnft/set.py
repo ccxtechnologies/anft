@@ -1,11 +1,14 @@
 # Copyright: 2018, CCX Technologies
 
+import asyncio
+import async_timeout
+
 from .nft import nft
 
 
 class Set:
 
-    initialized = False
+    init_timeout = 15
 
     def __init__(
             self,
@@ -25,6 +28,8 @@ class Set:
         """Named sets are sets that need to be defined first before they can be
         referenced in rules. Unlike anonymous sets, elements can be added to or
         removed from a named set at any time."""
+
+        self.initialized = asyncio.Event()
 
         self.name = name
         self.table = table.name
@@ -70,44 +75,46 @@ class Set:
     async def load(self, flush_existing=False):
         """Load the set, must be called before calling any other methods."""
 
-        if self.initialized:
-            return
+        if self.initialized.is_set():
+            raise RuntimeError("Already Initialized")
 
         await nft(
                 'add', 'set', self.family, self.table, self.name,
                 f"{{ {' '.join(self.config)} }}"
         )
 
+        self.initialized.set()
+
         if flush_existing:
             self.flush()
 
-        self.initialized = True
-
     async def flush(self):
         """Flush all elements of the chain."""
-        if not self.initialized:
-            raise RuntimeError(f"Set {self.name} hasn't been loaded.")
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         await nft('flush', 'set', self.family, self.table, self.name)
 
     async def delete(self):
         """Delete the set, any subsequent calls to this chain will fail."""
-        if not self.initialized:
-            raise RuntimeError(f"Set {self.name} hasn't been loaded.")
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         await self.flush()
         await nft('delete', 'set', self.family, self.table, self.name)
 
-        self.initialized = False
+        self.initialized.clear()
 
     async def list(self):
         """List all elements of the set."""
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
         return await nft('list', 'set', self.family, self.table, self.name)
 
     async def add_elements(self, elements):
         """Add a list of elements to the set."""
-        if not self.initialized:
-            raise RuntimeError(f"Set {self.name} hasn't been loaded.")
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         await nft(
                 'add', 'element', self.family, self.table, self.name,
@@ -125,7 +132,4 @@ class Set:
         )
 
     def __str__(self):
-        if not self.initialized:
-            raise RuntimeError(f"Set {self.name} hasn't been loaded.")
-
         return f"@{self.name}"

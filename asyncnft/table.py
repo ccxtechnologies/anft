@@ -1,6 +1,8 @@
 # Copyright: 2018, CCX Technologies
 
 import re
+import asyncio
+import async_timeout
 
 from .nft import nft
 from .chain import Chain
@@ -11,7 +13,7 @@ from .counter import Counter
 
 class Table:
 
-    initialized = False
+    init_timeout = 15
 
     def __init__(self, name, family="ip"):
         """Tables are containers for chains, sets and stateful objects.
@@ -27,6 +29,8 @@ class Table:
         if family not in ("ip", "ip6", "inet", "arp", "bridge", "netdev"):
             raise RuntimeError(f"Invalid family {family}")
 
+        self.initialized = asyncio.Event()
+
         self.name = name
         self.family = family
 
@@ -36,8 +40,8 @@ class Table:
         If flush_existing is True and the table already exists it will be
         flushed."""
 
-        if self.initialized:
-            return
+        if self.initialized.is_set():
+            raise RuntimeError("Already Initialized")
 
         try:
             await nft('create', 'table', self.family, self.name)
@@ -45,30 +49,34 @@ class Table:
             if flush_existing:
                 await nft('flush', 'table', self.family, self.name)
 
-        self.initialized = True
+        await asyncio.sleep(1)
+
+        self.initialized.set()
 
     async def flush(self):
         """Flush all chains and rules in the table."""
-        if not self.initialized:
-            raise RuntimeError(f"Table {self.name} hasn't been loaded.")
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         await nft('flush', 'table', self.family, self.name)
 
     async def delete(self):
         """Delete the table, any subsequent calls to this table will fail."""
-        if not self.initialized:
-            raise RuntimeError(f"Table {self.name} hasn't been loaded.")
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         await self.flush()
         await nft('delete', 'table', self.family, self.name)
 
-        self.initialized = False
+        self.initialized.clear()
 
     async def chain(self, name, flush_existing=False):
         """Create a new (or load an existing) Regular Chain.
 
         If flush_existing is True and the table already exists it will be
         flushed."""
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         chain = Chain(name, self)
         await chain.load(flush_existing)
@@ -88,6 +96,8 @@ class Table:
 
         If flush_existing is True and the table already exists it will be
         flushed."""
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         chain = BaseChain(name, self, type_, hook, device, priority, policy)
         await chain.load(flush_existing)
@@ -109,6 +119,8 @@ class Table:
             flush_existing=False
     ):
         """Create a new or load an existing set"""
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         set_ = Set(
                 name,
@@ -129,6 +141,8 @@ class Table:
 
     async def counter(self, name, flush_existing=False):
         """Create a new (or load an existing) Counter."""
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
 
         counter = Counter(name, self)
         await counter.load(flush_existing)
@@ -136,6 +150,9 @@ class Table:
 
     async def list(self):
         """List all chains and rules of the specified table."""
+        async with async_timeout.timeout(self.init_timeout):
+            await self.initialized.wait()
+
         return await nft('list', 'table', self.family, self.name)
 
     async def remove_rule_jumps(self, chain):
