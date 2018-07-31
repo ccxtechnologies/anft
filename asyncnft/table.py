@@ -2,20 +2,19 @@
 
 import re
 import asyncio
-import async_timeout
 
-from .nft import nft
 from .chain import Chain
 from .chain import BaseChain
 from .set import Set
 from .counter import Counter
+from .nft import wait_intialized
 
 
 class Table:
 
-    init_timeout = 15
+    timeout = 10
 
-    def __init__(self, name, family="ip"):
+    def __init__(self, name, family, ruleset):
         """Tables are containers for chains, sets and stateful objects.
         They are identified by their address family and their name.
 
@@ -31,6 +30,7 @@ class Table:
 
         self.initialized = asyncio.Event()
 
+        self.nft = ruleset.nft
         self.name = name
         self.family = family
 
@@ -43,45 +43,39 @@ class Table:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        try:
-            await nft('create', 'table', self.family, self.name)
-        except FileExistsError:
-            if flush_existing:
-                await nft('flush', 'table', self.family, self.name)
+        await self.nft.cmd('add', 'table', self.family, self.name)
 
-        await asyncio.sleep(1)
+        if flush_existing:
+            await self.nft.cmd('flush', 'table', self.family, self.name)
+            await self.nft.cmd('delete', 'table', self.family, self.name)
+            await self.nft.cmd('add', 'table', self.family, self.name)
 
         self.initialized.set()
 
+    @wait_intialized
     async def flush(self):
         """Flush all chains and rules in the table."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
+        await self.nft.cmd('flush', 'table', self.family, self.name)
 
-        await nft('flush', 'table', self.family, self.name)
-
+    @wait_intialized
     async def delete(self):
         """Delete the table, any subsequent calls to this table will fail."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         await self.flush()
-        await nft('delete', 'table', self.family, self.name)
+        await self.nft.cmd('delete', 'table', self.family, self.name)
 
         self.initialized.clear()
 
+    @wait_intialized
     async def chain(self, name, flush_existing=False):
         """Create a new (or load an existing) Regular Chain.
 
         If flush_existing is True and the table already exists it will be
         flushed."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         chain = Chain(name, self)
         await chain.load(flush_existing)
         return chain
 
+    @wait_intialized
     async def base_chain(
             self,
             name,
@@ -96,13 +90,11 @@ class Table:
 
         If flush_existing is True and the table already exists it will be
         flushed."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         chain = BaseChain(name, self, type_, hook, device, priority, policy)
         await chain.load(flush_existing)
         return chain
 
+    @wait_intialized
     async def set(
             self,
             name,
@@ -119,9 +111,6 @@ class Table:
             flush_existing=False
     ):
         """Create a new or load an existing set"""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         set_ = Set(
                 name,
                 self,
@@ -139,21 +128,18 @@ class Table:
         await set_.load(flush_existing)
         return set_
 
+    @wait_intialized
     async def counter(self, name, flush_existing=False):
         """Create a new (or load an existing) Counter."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         counter = Counter(name, self)
         await counter.load(flush_existing)
         return counter
 
     async def list(self):
         """List all chains and rules of the specified table."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
-        return await nft('list', 'table', self.family, self.name)
+        return await self.nft.cmd_stateful(
+                'list', 'table', self.family, self.name
+        )
 
     async def remove_rule_jumps(self, chain):
         """Remove all rules that jump to a chain. (required to clear jumps
@@ -174,7 +160,7 @@ class Table:
 
             jump_match = jump_pattern.match(line)
             if jump_match and (jump_match['chain'] == chain.name):
-                await nft(
+                await self.nft.cmd_stateful(
                         'delete', 'rule', self.family, self.name, src_chain,
                         'handle', jump_match['handle']
                 )

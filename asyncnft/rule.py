@@ -1,7 +1,5 @@
 # Copyright: 2018, CCX Technologies
 
-from .nft import nft
-
 
 class Rule:
 
@@ -14,6 +12,7 @@ class Rule:
 
         Refer to the netfilter man page for more info in expressions."""
 
+        self.nft = chain.nft
         self.table = chain.table
         self.family = chain.family
         self.chain = chain.name
@@ -24,24 +23,30 @@ class Rule:
         if self.handle:
             raise RuntimeError("Rule already has a handle.")
 
-        response = await nft(
+        response = await self.nft.cmd(
                 'insert', 'rule', self.family, self.table, self.chain,
                 self.statement
         )
 
-        self.handle = int(response.split('\n')[0].split('# handle ')[-1])
+        try:
+            self.handle = int(response.split('\n')[0].split('# handle ')[-1])
+        except ValueError:
+            raise RuntimeError(f"Unable to parse handle from {response}")
 
     async def append(self):
         """Add the rule at the bottom of the chain."""
         if self.handle:
             raise RuntimeError("Rule already has a handle.")
 
-        response = await nft(
+        response = await self.nft.cmd(
                 'add', 'rule', self.family, self.table, self.chain,
                 self.statement
         )
 
-        self.handle = int(response.split('# handle ')[-1])
+        try:
+            self.handle = int(response.split('# handle ')[-1])
+        except ValueError:
+            raise RuntimeError(f"Unable to parse handle from {response}")
 
     async def delete(self):
         """Delete the specified rule."""
@@ -49,7 +54,7 @@ class Rule:
         if not self.handle:
             raise RuntimeError("Rule not attached.")
 
-        await nft(
+        await self.nft.cmd_stateful(
                 'delete', 'rule', self.family, self.table, self.chain,
                 'handle', str(self.handle)
         )
@@ -62,7 +67,7 @@ class Rule:
         if not self.handle:
             raise RuntimeError("Rule not attached.")
 
-        await nft(
+        await self.nft.cmd(
                 'replace', 'rule', self.family, self.table, self.chain,
                 'handle', str(self.handle), statement
         )

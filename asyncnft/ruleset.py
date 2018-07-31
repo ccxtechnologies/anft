@@ -1,14 +1,14 @@
 # Copyright: 2018, CCX Technologies
 
-from .nft import nft
+from .nft import Nft
 from .table import Table
 
 
 class Ruleset:
-    def __init__(self):
+    def __init__(self, loop=None):
         """The ruleset keyword is used to identify the whole set of tables,
         chains, etc. currently in place in kernel."""
-        pass
+        self.nft = Nft(loop)
 
     async def flush(self, family=None):
         """Clear the whole ruleset. This will remove all tables and whatever
@@ -24,7 +24,7 @@ class Ruleset:
         ):
             raise RuntimeError(f"Invalid family {family}")
 
-        await nft('flush', 'ruleset', family if family else '')
+        await self.nft.cmd('flush', 'ruleset', family if family else '')
 
     async def list(self, family=None):
         """
@@ -38,7 +38,7 @@ class Ruleset:
         ):
             raise RuntimeError(f"Invalid family {family}")
 
-        return await nft('list', 'ruleset', family if family else '')
+        return await self.nft.cmd('list', 'ruleset', family if family else '')
 
     async def table(self, name, family="ip", flush_existing=False):
         """Create a new (or load an existing) Table.
@@ -46,6 +46,6 @@ class Ruleset:
         If flush_existing is True and the table already exists it will be
         flushed."""
 
-        table = Table(name, family)
+        table = Table(name, family, self)
         await table.load(flush_existing)
         return table

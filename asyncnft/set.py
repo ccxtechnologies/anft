@@ -3,8 +3,6 @@
 import asyncio
 import async_timeout
 
-from .nft import nft
-
 
 class Set:
 
@@ -31,6 +29,7 @@ class Set:
 
         self.initialized = asyncio.Event()
 
+        self.nft = table.nft
         self.name = name
         self.table = table.name
         self.family = table.family
@@ -78,7 +77,7 @@ class Set:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        await nft(
+        await self.nft.cmd(
                 'add', 'set', self.family, self.table, self.name,
                 f"{{ {' '.join(self.config)} }}"
         )
@@ -93,7 +92,7 @@ class Set:
         async with async_timeout.timeout(self.init_timeout):
             await self.initialized.wait()
 
-        await nft('flush', 'set', self.family, self.table, self.name)
+        await self.nft.cmd('flush', 'set', self.family, self.table, self.name)
 
     async def delete(self):
         """Delete the set, any subsequent calls to this chain will fail."""
@@ -101,7 +100,7 @@ class Set:
             await self.initialized.wait()
 
         await self.flush()
-        await nft('delete', 'set', self.family, self.table, self.name)
+        await self.nft.cmd('delete', 'set', self.family, self.table, self.name)
 
         self.initialized.clear()
 
@@ -109,14 +108,16 @@ class Set:
         """List all elements of the set."""
         async with async_timeout.timeout(self.init_timeout):
             await self.initialized.wait()
-        return await nft('list', 'set', self.family, self.table, self.name)
+        return await self.nft.cmd(
+                'list', 'set', self.family, self.table, self.name
+        )
 
     async def add_elements(self, elements):
         """Add a list of elements to the set."""
         async with async_timeout.timeout(self.init_timeout):
             await self.initialized.wait()
 
-        await nft(
+        await self.nft.cmd(
                 'add', 'element', self.family, self.table, self.name,
                 f"{{ {','.join(elements)} }}"
         )
@@ -126,7 +127,7 @@ class Set:
         if not self.initialized:
             raise RuntimeError(f"Set {self.name} hasn't been loaded.")
 
-        await nft(
+        await self.nft.cmd(
                 'delete', 'element', self.family, self.table, self.name,
                 f"{{ {','.join(elements)} }}"
         )

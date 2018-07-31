@@ -1,33 +1,172 @@
 # Copyright: 2018, CCX Technologies
 
 import asyncio
+import async_timeout
 
 
-async def nft(*command, loop=0):
+def wait_intialized(func):
+    async def func_wrapper(self, *args, **kwargs):
+        if not self.initialized.is_set():
+            async with async_timeout.timeout(self.timeout):
+                await self.initialized.wait()
+        return await func(self, *args, **kwargs)
 
-    if loop > 10:
-        raise RuntimeError("To many unknown errors")
+    return func_wrapper
 
-    process = await asyncio.create_subprocess_exec(
-            'nft',
-            '--echo',
-            '--handle',
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
 
-    if process.returncode == 1:
-        await nft(*command, loop=loop+1)
+class Nft:
 
-    elif process.returncode:
-        if b'File exists' in stderr:
-            raise FileExistsError()
+    timeout = 45
+    PROMPT = b'nft> \n'
+
+    def __init__(self, loop=None):
+
+        self.initialized = asyncio.Event()
+        self.lock = asyncio.Lock()
+        self.nft = None
+        self.loop = asyncio.get_event_loop() if loop is None else loop
+
+        asyncio.ensure_future(self._initialize(), loop=self.loop)
+
+    def __del__(self):
+        if (self.nft is not None) and (self.nft.returncode is None):
+            self.nft.terminate()
+        if (self.monitor is not None) and (self.monitor.returncode is None):
+            self.monitor.terminate()
+
+    async def _initialize(self):
+        if self.initialized.is_set() or (self.nft is not None):
+            raise RuntimeError("Already Initialized")
+
+        # if we don't have am onitor running nft interactive won't
+        # read back the # new generation lines
+        self.monitor = await asyncio.create_subprocess_exec(
+                'nft',
+                '--echo',
+                '--debug',
+                'netlink',
+                'monitor',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                loop=self.loop
+        )
+
+        self.nft = await asyncio.create_subprocess_exec(
+                'nft',
+                '--echo',
+                '--handle',
+                '--stateless',
+                '--interactive',
+                '--debug',
+                'netlink',
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                loop=self.loop,
+        )
+
+        self.initialized.set()
+
+    async def _read_monitor(self):
+        """This is required to keep the monitor pipe empty."""
+        while True:
+            status = await self.nft.stdout.readline()
+            if not status:
+                break
+
+    @wait_intialized
+    async def cmd(self, *command):
+        """Send an nft command."""
+
+        if (self.nft is None) or (self.nft.returncode is not None):
+            raise RuntimeError("Nft isn't initialized or has stopped")
+
+        if self.monitor.returncode is not None:
+            raise RuntimeError("Monitor stopped")
+
+        async with self.lock:
+            self.nft.stdin.write(b'\n')
+
+            prompt = None
+            while prompt != self.PROMPT:
+                async with async_timeout.timeout(self.timeout):
+                    prompt = await self.nft.stdout.readline()
+
+            self.nft.stdin.write(' '.join(command).encode() + b'\n\n')
+
+            prompt, echo, response, error, other = None, None, None, None, b''
+
+            if command[0] in ('add', 'insert') and command[1] == 'rule':
+                cmd = b'add'
+            elif command[0] in ('create', 'add'):
+                cmd = b'# new generation'
+            elif command[0] in ('flush', 'delete', 'reset', 'replace'):
+                cmd = b'None'
+                response = b''
+            else:
+                cmd = command[0].encode()
+
+            while (
+                    (prompt is None) or (echo is None)
+                    or ((response is None) and (error is None))
+            ):
+                try:
+                    async with async_timeout.timeout(self.timeout):
+                        status = await self.nft.stdout.readline()
+
+                except asyncio.TimeoutError:
+                    raise asyncio.TimeoutError(
+                            f"nft timeout: {' '.join(command).encode()}\n"
+                            f"prompt ==> {prompt}\necho ==> {echo}\n"
+                            f"response ==> {response}\nerror ==> {error}\n"
+                            f"other ==> {other}"
+                    )
+
+                if not status:
+                    break
+
+                if status == self.PROMPT:
+                    prompt = status
+                elif status.startswith(self.PROMPT[:-1]):
+                    echo = status
+                elif status.startswith(cmd):
+                    response = status
+                elif status.startswith(b'Error:'):
+                    error = status
+                else:
+                    other += status
+
+        if error is not None:
+            if b'File exists' in error:
+                raise FileExistsError()
+            else:
+                raise RuntimeError(f"{' '.join(command)} => {error.decode()}")
         else:
-            raise RuntimeError(
-                    f"Command {' '.join(command)} failed {process.returncode}:"
-                    f"\n{stderr.decode()}\n{stdout.decode()}"
-            )
+            return response.decode()
 
-    return stdout.decode()
+    async def cmd_stateful(self, *command):
+        """Send an nft command so read from stateful objects
+        (like counters)."""
+
+        process = await asyncio.create_subprocess_exec(
+                'nft',
+                '--echo',
+                '--handle',
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                loop=self.loop,
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode:
+            if b'File exists' in stderr:
+                raise FileExistsError()
+            else:
+                raise RuntimeError(
+                        f"Command {' '.join(command)}"
+                        f" failed {process.returncode}:"
+                        f"\n{stderr.decode()}\n{stdout.decode()}"
+                )
+
+        return stdout.decode()

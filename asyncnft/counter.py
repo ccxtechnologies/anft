@@ -2,9 +2,8 @@
 
 import re
 import asyncio
-import async_timeout
 
-from .nft import nft
+from .nft import wait_intialized
 
 counter_match = re.compile(
         r"\spackets\s+(?P<packets>\d+)\s+bytes\s+(?P<bytes>\d+)"
@@ -25,6 +24,7 @@ class Counter:
 
         self.initialized = asyncio.Event()
 
+        self.nft = table.nft
         self.name = name
         self.table = table.name
         self.family = table.family
@@ -35,28 +35,28 @@ class Counter:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        await nft('add', 'counter', self.family, self.table, self.name)
+        await self.nft.cmd(
+                'add', 'counter', self.family, self.table, self.name
+        )
 
         self.initialized.set()
 
         if flush_existing:
             await self.reset()
 
+    @wait_intialized
     async def delete(self):
         """Delete the counter, any subsequent calls to this chain will fail."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
-        await nft('delete', 'counter', self.family, self.table, self.name)
+        await self.nft.cmd_stateful(
+                'delete', 'counter', self.family, self.table, self.name
+        )
 
         self.initialized.clear()
 
+    @wait_intialized
     async def get(self):
         """Get the value of the counter."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
-        value = await nft(
+        value = await self.nft.cmd_stateful(
                 'list', 'counter', self.family, self.table, self.name
         )
         try:
@@ -67,14 +67,10 @@ class Counter:
         except AttributeError:
             return None
 
+    @wait_intialized
     async def reset(self):
         """Reset the counter."""
-        if not self.initialized:
-            raise RuntimeError(f"Counter {self.name} hasn't been loaded.")
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
-        return await nft(
+        return await self.nft.cmd(
                 'reset', 'counter', self.family, self.table, self.name
         )
 

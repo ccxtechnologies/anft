@@ -1,15 +1,14 @@
 # Copyright: 2018, CCX Technologies
 
 import asyncio
-import async_timeout
 
-from .nft import nft
 from .rule import Rule
+from .nft import wait_intialized
 
 
 class Chain:
 
-    init_timeout = 15
+    timeout = 10
 
     def __init__(self, name, table):
         """Regular chains are containers for rules, a regular chain may be
@@ -17,6 +16,7 @@ class Chain:
 
         self.initialized = asyncio.Event()
 
+        self.nft = table.nft
         self.name = name
         self.table = table.name
         self.family = table.family
@@ -31,55 +31,53 @@ class Chain:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        try:
-            await nft('create', 'chain', self.family, self.table, self.name)
-        except FileExistsError:
-            if flush_existing:
-                await nft('flush', 'chain', self.family, self.table, self.name)
+        await self.nft.cmd(
+                'add', 'chain', self.family, self.table, self.name
+        )
 
-        await asyncio.sleep(1)
+        if flush_existing:
+            await self.nft.cmd(
+                    'flush', 'chain', self.family, self.table, self.name
+            )
 
         self.initialized.set()
 
+    @wait_intialized
     async def flush(self):
         """Flush all rules of the chain."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
-        await nft('flush', 'chain', self.family, self.table, self.name)
+        await self.nft.cmd(
+                'flush', 'chain', self.family, self.table, self.name
+        )
 
     async def delete(self):
         """Delete the chain, any subsequent calls to this chain will fail."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
-        await self.flush()
+        await self.nft.cmd_stateful(
+                'flush', 'chain', self.family, self.table, self.name
+        )
         await self._table.remove_rule_jumps(self)
-        await nft('delete', 'chain', self.family, self.table, self.name)
+        await self.nft.cmd_stateful(
+                'delete', 'chain', self.family, self.table, self.name
+        )
 
         self.initialized.clear()
 
+    @wait_intialized
     async def list(self):
         """List all rules of the specified chain."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
+        return await self.nft.cmd(
+                'list', 'chain', self.family, self.table, self.name
+        )
 
-        return await nft('list', 'chain', self.family, self.table, self.name)
-
+    @wait_intialized
     async def insert_rule(self, statement):
         """Insert the rule at the top of the chain."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         rule = Rule(statement, self)
         await rule.insert()
         return rule
 
+    @wait_intialized
     async def append_rule(self, statement):
         """Append rule at the bottom of the chain."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         rule = Rule(statement, self)
         await rule.append()
         return rule
@@ -149,17 +147,18 @@ class BaseChain(Chain):
             raise RuntimeError("Already Initialized")
 
         try:
-            await nft(
-                    'create', 'chain', self.family, self.table, self.name,
-                    "{ "
+            await self.nft.cmd(
+                    'add', 'chain', self.family, self.table, self.name, "{ "
                     f"{self.type} {self.hook} {self.device} {self.priority};"
                     f" {self.policy};"
                     " }"
             )
         except FileExistsError:
             if flush_existing:
-                await nft('flush', 'chain', self.family, self.table, self.name)
-                await nft(
+                await self.nft.cmd(
+                        'flush', 'chain', self.family, self.table, self.name
+                )
+                await self.nft.cmd(
                         'delete', 'chain', self.family, self.table, self.name
                 )
                 await self.load()
