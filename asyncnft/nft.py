@@ -16,7 +16,7 @@ def wait_intialized(func):
 
 class Nft:
 
-    timeout = 45
+    timeout = 10
     PROMPT = b'nft> \n'
 
     def __init__(self, loop=None):
@@ -110,6 +110,7 @@ class Nft:
             else:
                 cmd = command[0].encode()
 
+            retry = False
             while (
                     (prompt is None) or (echo is None)
                     or ((response is None) and (error is None))
@@ -119,6 +120,12 @@ class Nft:
                         status = await self.nft.stdout.readline()
 
                 except asyncio.TimeoutError:
+                    # creating a table fails sometimes, no idea why
+                    if command[0] in ('create', 'add') and not retry:
+                        self.nft.stdin.write(
+                                ' '.join(command).encode() + b'\n\n'
+                        )
+                        retry = True
                     raise asyncio.TimeoutError(
                             f"nft timeout: {' '.join(command).encode()}\n"
                             f"prompt ==> {prompt}\necho ==> {echo}\n"
