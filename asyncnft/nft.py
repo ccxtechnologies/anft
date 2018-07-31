@@ -38,19 +38,32 @@ class Nft:
         if self.initialized.is_set() or (self.nft is not None):
             raise RuntimeError("Already Initialized")
 
+        await self._start_monitor()
+        await self._start_nft()
+
+        self.initialized.set()
+
+    async def _start_monitor(self):
         # if we don't have am onitor running nft interactive won't
         # read back the # new generation lines
         self.monitor = await asyncio.create_subprocess_exec(
                 'nft',
                 '--echo',
-                '--debug',
-                'netlink',
                 'monitor',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 loop=self.loop
         )
+        asyncio.ensure_future(self._read_monitor(), loop=self.loop)
 
+    async def _read_monitor(self):
+        """This is required to keep the monitor pipe empty."""
+        while True:
+            status = await self.monitor.stdout.readline()
+            if not status:
+                break
+
+    async def _start_nft(self):
         self.nft = await asyncio.create_subprocess_exec(
                 'nft',
                 '--echo',
@@ -65,15 +78,6 @@ class Nft:
                 loop=self.loop,
         )
 
-        self.initialized.set()
-
-    async def _read_monitor(self):
-        """This is required to keep the monitor pipe empty."""
-        while True:
-            status = await self.nft.stdout.readline()
-            if not status:
-                break
-
     @wait_intialized
     async def cmd(self, *command):
         """Send an nft command."""
@@ -82,7 +86,7 @@ class Nft:
             raise RuntimeError("Nft isn't initialized or has stopped")
 
         if self.monitor.returncode is not None:
-            raise RuntimeError("Monitor stopped")
+            await self._start_monitor()
 
         async with self.lock:
             self.nft.stdin.write(b'\n')
