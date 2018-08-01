@@ -3,6 +3,8 @@
 import asyncio
 import async_timeout
 
+from .nft import wait_intialized
+
 
 class Set:
 
@@ -82,51 +84,44 @@ class Set:
                 f"{{ {' '.join(self.config)} }}"
         )
 
+        if flush_existing:
+            await self.nft.cmd(
+                    'flush', 'set', self.family, self.table, self.name
+            )
+
         self.initialized.set()
 
-        if flush_existing:
-            self.flush()
-
+    @wait_intialized
     async def flush(self):
         """Flush all elements of the chain."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         await self.nft.cmd('flush', 'set', self.family, self.table, self.name)
 
+    @wait_intialized
     async def delete(self):
         """Delete the set, any subsequent calls to this chain will fail."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         await self.flush()
         await self.nft.cmd('delete', 'set', self.family, self.table, self.name)
 
         self.initialized.clear()
 
+    @wait_intialized
     async def list(self):
         """List all elements of the set."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
         return await self.nft.cmd(
                 'list', 'set', self.family, self.table, self.name
         )
 
+    @wait_intialized
     async def add_elements(self, elements):
         """Add a list of elements to the set."""
-        async with async_timeout.timeout(self.init_timeout):
-            await self.initialized.wait()
-
         await self.nft.cmd(
                 'add', 'element', self.family, self.table, self.name,
                 f"{{ {','.join(elements)} }}"
         )
 
+    @wait_intialized
     async def remove_elements(self, elements):
         """Remove a list of elements to the set."""
-        if not self.initialized:
-            raise RuntimeError(f"Set {self.name} hasn't been loaded.")
-
         await self.nft.cmd(
                 'delete', 'element', self.family, self.table, self.name,
                 f"{{ {','.join(elements)} }}"
