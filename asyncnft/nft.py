@@ -16,7 +16,7 @@ def wait_intialized(func):
 
 class Nft:
 
-    timeout = 10
+    timeout = 3
     PROMPT = b'nft> \n'
 
     def __init__(self, loop=None):
@@ -54,7 +54,7 @@ class Nft:
         )
 
     @wait_intialized
-    async def cmd(self, *command):
+    async def cmd(self, *command, _recurse=0):
         """Send an nft command."""
 
         if (self.nft is None) or (self.nft.returncode is not None):
@@ -80,7 +80,6 @@ class Nft:
             else:
                 cmd = command[0].encode()
 
-            retry = False
             while (
                     (prompt is None) or (echo is None)
                     or ((response is None) and (error is None))
@@ -90,12 +89,19 @@ class Nft:
                         status = await self.nft.stdout.readline()
 
                 except asyncio.TimeoutError:
-                    # creating a table fails sometimes, no idea why
-                    if command[0] in ('create', 'add') and not retry:
-                        self.nft.stdin.write(
-                                ' '.join(command).encode() + b'\n\n'
-                        )
-                        retry = True
+                    if _recurse < 3:
+                        # lose the socket sometimes, no idea why
+
+                        self.nft.terminate()
+                        await self._start_nft()
+
+                        # Can remove this once we get a better
+                        # handle on what's going on
+                        import syslog
+                        syslog.syslog(f"+++ Retrying Command: {command}")
+
+                        return await self.cmd(*command, _recurse + 1)
+
                     raise asyncio.TimeoutError(
                             f"nft timeout: {' '.join(command).encode()}\n"
                             f"prompt ==> {prompt}\necho ==> {echo}\n"
@@ -153,3 +159,6 @@ class Nft:
                 )
 
         return stdout.decode()
+
+    async def cmd_atomic(self, commands):
+        pass
