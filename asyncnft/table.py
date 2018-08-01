@@ -46,12 +46,11 @@ class Table:
         if flush_existing:
             try:
                 await self.nft.cmd('flush', 'table', self.family, self.name)
-                # need to delete to reset policies
                 await self.nft.cmd('delete', 'table', self.family, self.name)
             except FileNotFoundError:
                 pass
 
-        await self.nft.cmd('add', 'table', self.family, self.name)
+        await self.nft.cmd('create', 'table', self.family, self.name)
 
         self.initialized.set()
 

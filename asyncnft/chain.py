@@ -31,14 +31,18 @@ class Chain:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        await self.nft.cmd(
-                'add', 'chain', self.family, self.table, self.name
-        )
-
         if flush_existing:
-            await self.nft.cmd(
-                    'flush', 'chain', self.family, self.table, self.name
-            )
+            try:
+                await self.nft.cmd(
+                        'flush', 'chain', self.family, self.table, self.name
+                )
+                await self.nft.cmd('delete', 'table', self.family, self.name)
+            except FileNotFoundError:
+                pass
+
+        await self.nft.cmd(
+                'create', 'chain', self.family, self.table, self.name
+        )
 
         self.initialized.set()
 

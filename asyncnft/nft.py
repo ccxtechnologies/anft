@@ -31,37 +31,14 @@ class Nft:
     def __del__(self):
         if (self.nft is not None) and (self.nft.returncode is None):
             self.nft.terminate()
-        if (self.monitor is not None) and (self.monitor.returncode is None):
-            self.monitor.terminate()
 
     async def _initialize(self):
         if self.initialized.is_set() or (self.nft is not None):
             raise RuntimeError("Already Initialized")
 
-        await self._start_monitor()
         await self._start_nft()
 
         self.initialized.set()
-
-    async def _start_monitor(self):
-        # if we don't have am onitor running nft interactive won't
-        # read back the # new generation lines
-        self.monitor = await asyncio.create_subprocess_exec(
-                'nft',
-                '--echo',
-                'monitor',
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                loop=self.loop
-        )
-        asyncio.ensure_future(self._read_monitor(), loop=self.loop)
-
-    async def _read_monitor(self):
-        """This is required to keep the monitor pipe empty."""
-        while True:
-            status = await self.monitor.stdout.readline()
-            if not status:
-                break
 
     async def _start_nft(self):
         self.nft = await asyncio.create_subprocess_exec(
@@ -70,8 +47,6 @@ class Nft:
                 '--handle',
                 '--stateless',
                 '--interactive',
-                '--debug',
-                'netlink',
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -85,9 +60,6 @@ class Nft:
         if (self.nft is None) or (self.nft.returncode is not None):
             raise RuntimeError("Nft isn't initialized or has stopped")
 
-        if self.monitor.returncode is not None:
-            await self._start_monitor()
-
         async with self.lock:
             self.nft.stdin.write(b'\n')
 
@@ -100,10 +72,8 @@ class Nft:
 
             prompt, echo, response, error, other = None, None, None, None, b''
 
-            if command[0] in ('add', 'insert') and command[1] == 'rule':
+            if command[0] in ('create', 'add', 'insert'):
                 cmd = b'add'
-            elif command[0] in ('create', 'add'):
-                cmd = b'# new generation'
             elif command[0] in ('flush', 'delete', 'reset', 'replace'):
                 cmd = b'None'
                 response = b''
