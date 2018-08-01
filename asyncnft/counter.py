@@ -12,7 +12,7 @@ counter_match = re.compile(
 
 class Counter:
 
-    init_timeout = 15
+    timeout = 10
 
     def __init__(
             self,
