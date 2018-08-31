@@ -1,6 +1,7 @@
 # Copyright: 2018, CCX Technologies
 
 import asyncio
+import subprocess
 import async_timeout
 
 
@@ -146,7 +147,12 @@ class Nft:
                 stderr=asyncio.subprocess.PIPE,
                 loop=self.loop,
         )
-        stdout, stderr = await process.communicate()
+
+        try:
+            stdout, stderr = await process.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = await process.communicate()
 
         if process.returncode:
             if b'File exists' in stderr:
@@ -159,6 +165,3 @@ class Nft:
                 )
 
         return stdout.decode()
-
-    async def cmd_atomic(self, commands):
-        pass
