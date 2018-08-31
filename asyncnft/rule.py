@@ -18,14 +18,23 @@ class Rule:
         self.chain = chain.name
         self.statement = statement
 
-    async def insert(self):
-        """Insert the rule at the top of the chain."""
+    async def insert(self, before=None):
+        """Add the rule at the top of the chain if before is None,
+            otherwise append before the rule passed in the before argument."""
+
         if self.handle:
             raise RuntimeError("Rule already has a handle.")
 
+        if before is not None:
+            if before.handle is None:
+                raise RuntimeError("Before rule has no handle.")
+            statement = f"position {before.handle} {self.statement}"
+        else:
+            statement = self.statement
+
         response = await self.nft.cmd(
                 'insert', 'rule', self.family, self.table, self.chain,
-                self.statement
+                statement
         )
 
         try:
@@ -33,14 +42,22 @@ class Rule:
         except ValueError:
             raise RuntimeError(f"Unable to parse handle from {response}")
 
-    async def append(self):
-        """Add the rule at the bottom of the chain."""
+    async def append(self, after=None):
+        """Add the rule at the bottom of the chain if after is None,
+            otherwise append after the rule passed in the after argument."""
+
         if self.handle:
             raise RuntimeError("Rule already has a handle.")
 
+        if after is not None:
+            if after.handle is None:
+                raise RuntimeError("After rule has no handle.")
+            statement = f"position {after.handle} {self.statement}"
+        else:
+            statement = self.statement
+
         response = await self.nft.cmd(
-                'add', 'rule', self.family, self.table, self.chain,
-                self.statement
+                'add', 'rule', self.family, self.table, self.chain, statement
         )
 
         try:

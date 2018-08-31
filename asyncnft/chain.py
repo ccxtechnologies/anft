@@ -73,17 +73,19 @@ class Chain:
         )
 
     @wait_intialized
-    async def insert_rule(self, statement):
-        """Insert the rule at the top of the chain."""
+    async def insert_rule(self, statement, before=None):
+        """Add the rule at the top of the chain if before is None,
+            otherwise append before the rule passed in the before argument."""
         rule = Rule(statement, self)
-        await rule.insert()
+        await rule.insert(before)
         return rule
 
     @wait_intialized
-    async def append_rule(self, statement):
-        """Append rule at the bottom of the chain."""
+    async def append_rule(self, statement, after=None):
+        """Add the rule at the bottom of the chain if after is None,
+            otherwise append after the rule passed in the after argument."""
         rule = Rule(statement, self)
-        await rule.append()
+        await rule.append(after)
         return rule
 
     def __str__(self):
