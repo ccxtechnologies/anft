@@ -145,12 +145,13 @@ class Nft:
                 *command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                loop=self.loop,
+                loop=self.loop
         )
 
         try:
-            stdout, stderr = await process.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
+            async with async_timeout.timeout(3):
+                stdout, stderr = await process.communicate()
+        except asyncio.TimeoutError:
             process.kill()
             stdout, stderr = await process.communicate()
 
