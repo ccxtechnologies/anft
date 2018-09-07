@@ -127,7 +127,7 @@ class Nft:
             import syslog
             syslog.syslog(f"+++ Retrying Command: {command}")
 
-            return await self.cmd(*command, _recurse + 1)
+            return await self.cmd(*command, _recurse=_recurse + 1)
 
         if error is not None:
             if b'File exists' in error:
