@@ -1,7 +1,6 @@
 # Copyright: 2018, CCX Technologies
 
 import asyncio
-import subprocess
 import async_timeout
 
 
@@ -61,6 +60,7 @@ class Nft:
         if (self.nft is None) or (self.nft.returncode is not None):
             raise RuntimeError("Nft isn't initialized or has stopped")
 
+        retry = False
         async with self.lock:
             self.nft.stdin.write(b'\n')
 
@@ -91,24 +91,16 @@ class Nft:
 
                 except asyncio.TimeoutError:
                     if _recurse < 3:
-                        # lose the socket sometimes, no idea why
+                        retry = True
+                        break
 
-                        self.nft.terminate()
-                        await self._start_nft()
-
-                        # Can remove this once we get a better
-                        # handle on what's going on
-                        import syslog
-                        syslog.syslog(f"+++ Retrying Command: {command}")
-
-                        return await self.cmd(*command, _recurse + 1)
-
-                    raise asyncio.TimeoutError(
-                            f"nft timeout: {' '.join(command).encode()}\n"
-                            f"prompt ==> {prompt}\necho ==> {echo}\n"
-                            f"response ==> {response}\nerror ==> {error}\n"
-                            f"other ==> {other}"
-                    )
+                    else:
+                        raise asyncio.TimeoutError(
+                                f"nft timeout: {' '.join(command).encode()}\n"
+                                f"prompt ==> {prompt}\necho ==> {echo}\n"
+                                f"response ==> {response}\nerror ==> {error}\n"
+                                f"other ==> {other}"
+                        )
 
                 if not status:
                     break
@@ -123,6 +115,19 @@ class Nft:
                     error = status
                 else:
                     other += status
+
+        if retry:
+            # lose the socket sometimes, no idea why
+
+            self.nft.terminate()
+            await self._start_nft()
+
+            # Can remove this once we get a better
+            # handle on what's going on
+            import syslog
+            syslog.syslog(f"+++ Retrying Command: {command}")
+
+            return await self.cmd(*command, _recurse + 1)
 
         if error is not None:
             if b'File exists' in error:
