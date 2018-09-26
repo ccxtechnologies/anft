@@ -70,7 +70,7 @@ class Counter:
     @wait_intialized
     async def reset(self):
         """Reset the counter."""
-        return await self.nft.cmd(
+        return await self.nft.cmd_stateful(
                 'reset', 'counter', self.family, self.table, self.name
         )
 
