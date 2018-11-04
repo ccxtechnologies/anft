@@ -42,7 +42,7 @@ class Nft:
 
     async def _start_nft(self):
         self.nft = await asyncio.create_subprocess_exec(
-                'nft',
+                '/sbin/nft',
                 '--echo',
                 '--handle',
                 '--stateless',
