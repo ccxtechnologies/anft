@@ -144,7 +144,7 @@ class Nft:
         (like counters)."""
 
         process = await asyncio.create_subprocess_exec(
-                'nft',
+                '/sbin/nft',
                 '--echo',
                 '--handle',
                 *command,
