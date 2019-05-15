@@ -16,7 +16,7 @@ def wait_intialized(func):
 
 class Nft:
 
-    timeout = 8
+    timeout = 30
     PROMPT = b'nft> \n'
 
     def __init__(self, loop=None):
