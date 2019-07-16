@@ -52,11 +52,11 @@ class Chain:
 
     async def delete(self):
         """Delete the chain, any subsequent calls to this chain will fail."""
-        await self.nft.cmd_stateful(
+        await self.nft.cmd(
                 'flush', 'chain', self.family, self.table, self.name
         )
         await self._table.remove_rule_jumps(self)
-        await self.nft.cmd_stateful(
+        await self.nft.cmd(
                 'delete', 'chain', self.family, self.table, self.name
         )
 
@@ -100,7 +100,8 @@ class BaseChain(Chain):
             priority=0,
             policy='accept'
     ):
-        """A base chain is an entry point for packets from the networking stack.
+        """A base chain is an entry point for packets from the Linux
+        networking stack.
 
         The priority parameter accepts a signed integer value which specifies
         the order in which chains with same hook value are traversed. The

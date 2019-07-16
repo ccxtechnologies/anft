@@ -47,7 +47,7 @@ class Counter:
     @wait_intialized
     async def delete(self):
         """Delete the counter, any subsequent calls to this chain will fail."""
-        await self.nft.cmd_stateful(
+        await self.nft.cmd(
                 'delete', 'counter', self.family, self.table, self.name
         )
 
@@ -56,7 +56,7 @@ class Counter:
     @wait_intialized
     async def get(self):
         """Get the value of the counter."""
-        value = await self.nft.cmd_stateful(
+        value = await self.nft.cmd(
                 'list', 'counter', self.family, self.table, self.name
         )
         try:
@@ -70,7 +70,7 @@ class Counter:
     @wait_intialized
     async def reset(self):
         """Reset the counter."""
-        return await self.nft.cmd_stateful(
+        return await self.nft.cmd(
                 'reset', 'counter', self.family, self.table, self.name
         )
 

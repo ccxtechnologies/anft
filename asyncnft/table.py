@@ -9,6 +9,11 @@ from .set import Set
 from .counter import Counter
 from .nft import wait_intialized
 
+chain_pattern = re.compile(
+        r"^\s+chain (?P<chain>\w+) { # handle (?P<handle>\d+)$"
+)
+jump_pattern = re.compile(r"^\s+jump (?P<chain>\w+) # handle (?P<handle>\d+)$")
+
 
 class Table:
 
@@ -50,7 +55,7 @@ class Table:
             except FileNotFoundError:
                 pass
 
-        await self.nft.cmd('create', 'table', self.family, self.name)
+        await self.nft.cmd('add', 'table', self.family, self.name)
 
         self.initialized.set()
 
@@ -139,18 +144,11 @@ class Table:
 
     async def list(self):
         """List all chains and rules of the specified table."""
-        return await self.nft.cmd_stateful(
-                'list', 'table', self.family, self.name
-        )
+        return await self.nft.cmd('list', 'table', self.family, self.name)
 
     async def remove_rule_jumps(self, chain):
         """Remove all rules that jump to a chain. (required to clear jumps
         before deleting a chain)."""
-
-        chain_pattern = re.compile(r"^\s+chain (?P<chain>\w+) {$")
-        jump_pattern = re.compile(
-                r"^\s+jump (?P<chain>\w+) # handle (?P<handle>\d+)$"
-        )
 
         src_chain = ""
         listing = await self.list()
@@ -162,7 +160,7 @@ class Table:
 
             jump_match = jump_pattern.match(line)
             if jump_match and (jump_match['chain'] == chain.name):
-                await self.nft.cmd_stateful(
+                await self.nft.cmd(
                         'delete', 'rule', self.family, self.name, src_chain,
                         'handle', jump_match['handle']
                 )

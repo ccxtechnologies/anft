@@ -1,7 +1,8 @@
-# Copyright: 2018, CCX Technologies
+# Copyright: 2018-2019, CCX Technologies
 
 import asyncio
 import async_timeout
+
 import syslog
 
 
@@ -46,7 +47,6 @@ class Nft:
                 '/sbin/nft',
                 '--echo',
                 '--handle',
-                '--stateless',
                 '--interactive',
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
@@ -61,40 +61,31 @@ class Nft:
         if (self.nft is None) or (self.nft.returncode is not None):
             raise RuntimeError("Nft isn't initialized or has stopped")
 
-        retry = False
         async with self.lock:
             self.nft.stdin.write(' '.join(command).encode() + b'\n')
 
-            prompt, echo, response, error, other = None, None, None, None, b''
+            prompt, echo, response, error = False, None, b'', None
 
-            if command[0] in ('create', 'add', 'insert'):
-                cmd = b'add'
-            elif command[0] in ('flush', 'delete', 'reset', 'replace'):
-                cmd = b'None'
-                response = b''
-            else:
-                cmd = command[0].encode()
-
-            while (
-                    (echo is None) or (prompt is None)
-                    or ((response is None) and (error is None))
-            ):
+            while True:
                 try:
                     async with async_timeout.timeout(self.timeout):
                         status = await self.nft.stdout.readline()
 
                 except asyncio.TimeoutError:
-                    if _recurse < 3:
-                        retry = True
-                        break
-
-                    else:
-                        raise asyncio.TimeoutError(
-                                f"nft timeout: {' '.join(command).encode()}\n"
-                                f"prompt ==> {prompt}\necho ==> {echo}\n"
-                                f"response ==> {response}\nerror ==> {error}\n"
-                                f"other ==> {other}"
-                        )
+                    syslog.syslog(
+                            f"nft timeout: {' '.join(command).encode()}\n"
+                            f"prompt ==> {prompt}\n"
+                            f"echo ==> {echo}\n"
+                            f"response ==> {response}\n"
+                            f"error ==> {error}\n"
+                    )
+                    raise asyncio.TimeoutError(
+                            f"nft timeout: {' '.join(command).encode()}\n"
+                            f"prompt ==> {prompt}\n"
+                            f"echo ==> {echo}\n"
+                            f"response ==> {response}\n"
+                            f"error ==> {error}\n"
+                    )
 
                 if not status:
                     break
@@ -106,73 +97,23 @@ class Nft:
                     echo = status
                     self.nft.stdin.write(b'\n')
 
-                elif status.startswith(cmd):
-                    response = status
-
                 elif status.startswith(b'Error:'):
                     error = status
 
                 else:
-                    other += status
+                    response += status
 
-        if retry:
-            # lose the socket sometimes, no idea why
-
-            self.nft.terminate()
-            await self._start_nft()
-
-            # Can remove this once we get a better
-            # handle on what's going on
-            syslog.syslog(f"+++ Retrying Command: {command}")
-            syslog.syslog(
-                    "+++ "
-                    f"nft timeout: {' '.join(command).encode()}\n"
-                    f"prompt ==> {prompt}\necho ==> {echo}\n"
-                    f"response ==> {response}\nerror ==> {error}\n"
-                    f"other ==> {other}"
-            )
-
-            return await self.cmd(*command, _recurse=_recurse + 1)
+                if echo and prompt:
+                    break
 
         if error is not None:
             if b'File exists' in error:
                 raise FileExistsError()
+
             elif b'No such file or directory' in error:
                 raise FileNotFoundError()
+
             else:
                 raise RuntimeError(f"{' '.join(command)} => {error.decode()}")
-        else:
-            return response.decode()
 
-    async def cmd_stateful(self, *command):
-        """Send an nft command so read from stateful objects
-        (like counters)."""
-
-        process = await asyncio.create_subprocess_exec(
-                '/sbin/nft',
-                '--echo',
-                '--handle',
-                *command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                loop=self.loop
-        )
-
-        try:
-            async with async_timeout.timeout(3):
-                stdout, stderr = await process.communicate()
-        except asyncio.TimeoutError:
-            process.kill()
-            stdout, stderr = await process.communicate()
-
-        if process.returncode:
-            if b'File exists' in stderr:
-                raise FileExistsError()
-            else:
-                raise RuntimeError(
-                        f"Command {' '.join(command)}"
-                        f" failed {process.returncode}:"
-                        f"\n{stderr.decode()}\n{stdout.decode()}"
-                )
-
-        return stdout.decode()
+        return response.decode()

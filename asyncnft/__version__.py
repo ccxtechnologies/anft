@@ -1,4 +1,4 @@
-# == Copyright: 2018, CCX Technologies
+# == Copyright: 2018-2019, CCX Technologies
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 

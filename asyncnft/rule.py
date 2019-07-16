@@ -71,7 +71,7 @@ class Rule:
         if not self.handle:
             raise RuntimeError("Rule not attached.")
 
-        await self.nft.cmd_stateful(
+        await self.nft.cmd(
                 'delete', 'rule', self.family, self.table, self.chain,
                 'handle', str(self.handle)
         )
