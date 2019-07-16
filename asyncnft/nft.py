@@ -2,7 +2,6 @@
 
 import asyncio
 import async_timeout
-
 import syslog
 
 

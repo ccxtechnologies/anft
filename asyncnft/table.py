@@ -19,25 +19,16 @@ class Table:
 
     timeout = 10
 
-    def __init__(self, name, family, ruleset):
-        """Tables are containers for chains, sets and stateful objects.
-        They are identified by their address family and their name.
-
-        The address family must be one of ip, ip6, inet, arp, bridge, netdev.
-        The inet address family is a dummy family which is used to create
-        hybrid IPv4/IPv6 tables. The meta expression nfproto keyword can be
-        used to test which family (ipv4 or ipv6) context the packet is being
-        processed in. When no address family is specified, ip is used by
-        default."""
-
-        if family not in ("ip", "ip6", "inet", "arp", "bridge", "netdev"):
-            raise RuntimeError(f"Invalid family {family}")
+    def __init__(self, name, ruleset):
+        """Tables are containers for chains, sets and stateful objects."""
 
         self.initialized = asyncio.Event()
 
         self.nft = ruleset.nft
         self.name = name
-        self.family = family
+
+    async def cmd(self, command, *args):
+        return await self.nft.cmd(command, 'table', self.name, *args)
 
     async def load(self, flush_existing=False):
         """Load the table, must be called before calling any other methods.
@@ -48,27 +39,22 @@ class Table:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        if flush_existing:
-            try:
-                await self.nft.cmd('flush', 'table', self.family, self.name)
-                await self.nft.cmd('delete', 'table', self.family, self.name)
-            except FileNotFoundError:
-                pass
-
-        await self.nft.cmd('add', 'table', self.family, self.name)
+        response = await self.cmd('add')
+        if flush_existing and not response:
+            await self.cmd('flush')
 
         self.initialized.set()
 
     @wait_intialized
     async def flush(self):
         """Flush all chains and rules in the table."""
-        await self.nft.cmd('flush', 'table', self.family, self.name)
+        await self.cmd('flush')
 
     @wait_intialized
     async def delete(self):
         """Delete the table, any subsequent calls to this table will fail."""
         await self.flush()
-        await self.nft.cmd('delete', 'table', self.family, self.name)
+        await self.cmd('delete')
 
         self.initialized.clear()
 
@@ -144,7 +130,7 @@ class Table:
 
     async def list(self):
         """List all chains and rules of the specified table."""
-        return await self.nft.cmd('list', 'table', self.family, self.name)
+        return await self.cmd('list')
 
     async def remove_rule_jumps(self, chain):
         """Remove all rules that jump to a chain. (required to clear jumps
@@ -161,8 +147,8 @@ class Table:
             jump_match = jump_pattern.match(line)
             if jump_match and (jump_match['chain'] == chain.name):
                 await self.nft.cmd(
-                        'delete', 'rule', self.family, self.name, src_chain,
-                        'handle', jump_match['handle']
+                        'delete', 'rule', self.name, src_chain, 'handle',
+                        jump_match['handle']
                 )
 
     def __str__(self):

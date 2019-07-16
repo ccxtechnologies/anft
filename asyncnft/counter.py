@@ -27,7 +27,11 @@ class Counter:
         self.nft = table.nft
         self.name = name
         self.table = table.name
-        self.family = table.family
+
+    async def cmd(self, command, *args):
+        return await self.nft.cmd(
+                command, 'counter', self.table, self.name, *args
+        )
 
     async def load(self, flush_existing=False):
         """Load the set, must be called before calling any other methods."""
@@ -35,9 +39,7 @@ class Counter:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        await self.nft.cmd(
-                'add', 'counter', self.family, self.table, self.name
-        )
+        await self.cmd('add')
 
         self.initialized.set()
 
@@ -47,32 +49,27 @@ class Counter:
     @wait_intialized
     async def delete(self):
         """Delete the counter, any subsequent calls to this chain will fail."""
-        await self.nft.cmd(
-                'delete', 'counter', self.family, self.table, self.name
-        )
+        await self.cmd('delete')
 
         self.initialized.clear()
 
     @wait_intialized
     async def get(self):
         """Get the value of the counter."""
-        value = await self.nft.cmd(
-                'list', 'counter', self.family, self.table, self.name
-        )
+        value = await self.cmd('list')
         try:
             return {
                     k: int(v)
                     for k, v in counter_match.search(value).groupdict().items()
             }
+
         except AttributeError:
             return None
 
     @wait_intialized
     async def reset(self):
         """Reset the counter."""
-        return await self.nft.cmd(
-                'reset', 'counter', self.family, self.table, self.name
-        )
+        return await self.cmd('reset')
 
     def __str__(self):
         return f"counter name {self.name}"

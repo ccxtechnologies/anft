@@ -19,8 +19,12 @@ class Chain:
         self.nft = table.nft
         self.name = name
         self.table = table.name
-        self.family = table.family
         self._table = table
+
+    async def cmd(self, command, *args):
+        return await self.nft.cmd(
+                command, 'chain', self.table, self.name, *args
+        )
 
     async def load(self, flush_existing=False):
         """Load the chain, must be called before calling any other methods.
@@ -31,43 +35,29 @@ class Chain:
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        if flush_existing:
-            try:
-                await self.nft.cmd(
-                        'flush', 'chain', self.family, self.table, self.name
-                )
-            except FileNotFoundError:
-                pass
-
-        await self.nft.cmd('add', 'chain', self.family, self.table, self.name)
+        response = await self.cmd('add')
+        if flush_existing and not response:
+            await self.cmd('flush')
 
         self.initialized.set()
 
     @wait_intialized
     async def flush(self):
         """Flush all rules of the chain."""
-        await self.nft.cmd(
-                'flush', 'chain', self.family, self.table, self.name
-        )
+        await self.cmd('flush')
 
     async def delete(self):
         """Delete the chain, any subsequent calls to this chain will fail."""
-        await self.nft.cmd(
-                'flush', 'chain', self.family, self.table, self.name
-        )
+        await self.cmd('flush')
         await self._table.remove_rule_jumps(self)
-        await self.nft.cmd(
-                'delete', 'chain', self.family, self.table, self.name
-        )
+        await self.cmd('delete')
 
         self.initialized.clear()
 
     @wait_intialized
     async def list(self):
         """List all rules of the specified chain."""
-        return await self.nft.cmd(
-                'list', 'chain', self.family, self.table, self.name
-        )
+        return await self.cmd('list')
 
     @wait_intialized
     async def insert_rule(self, statement, before=None):
@@ -114,27 +104,6 @@ class BaseChain(Chain):
 
         super().__init__(name, table)
 
-        if type_ not in ('filter', 'nat', 'route'):
-            raise RuntimeError(f"Invalid type {type_})")
-
-        if (type_ in ('nat', 'route')) and (self.family not in ('ip', 'ip6')):
-            raise RuntimeError(
-                    f"Invalid family {self.family} for type {type_}"
-            )
-
-        if (
-                (
-                        self.family in ('ip', 'ip6', 'inet', 'bridge')
-                        and hook not in (
-                                'prerouting', 'input', 'forward', 'output',
-                                'postrouting'
-                        )
-                )
-                or (self.family == 'arp' and hook not in ('input', 'output'))
-                or (self.family == 'netdev' and hook != 'ingress')
-        ):
-            raise RuntimeError(f"Invalid hook {hook} for family {self.family}")
-
         self.type = f"type {type_}"
         self.hook = f"hook {hook}"
         self.device = f"device {device}" if device else ""
@@ -150,21 +119,12 @@ class BaseChain(Chain):
         if self.initialized.is_set():
             raise RuntimeError("Already Initialized")
 
-        try:
-            await self.nft.cmd(
-                    'add', 'chain', self.family, self.table, self.name, "{ "
-                    f"{self.type} {self.hook} {self.device} {self.priority};"
-                    f" {self.policy};"
-                    " }"
-            )
-        except FileExistsError:
-            if flush_existing:
-                await self.nft.cmd(
-                        'flush', 'chain', self.family, self.table, self.name
-                )
-                await self.nft.cmd(
-                        'delete', 'chain', self.family, self.table, self.name
-                )
-                await self.load()
+        response = await self.cmd(
+                'add',
+                f"{{ {self.type} {self.hook} {self.device} {self.priority};"
+                f" {self.policy}; }}"
+        )
+        if flush_existing and not response:
+            await self.cmd('flush')
 
         self.initialized.set()

@@ -14,9 +14,13 @@ class Rule:
 
         self.nft = chain.nft
         self.table = chain.table
-        self.family = chain.family
         self.chain = chain.name
         self.statement = statement
+
+    async def cmd(self, command, *args):
+        return await self.nft.cmd(
+                command, 'rule', self.table, self.chain, *args
+        )
 
     async def insert(self, before=None):
         """Add the rule at the top of the chain if before is None,
@@ -32,10 +36,7 @@ class Rule:
         else:
             statement = self.statement
 
-        response = await self.nft.cmd(
-                'insert', 'rule', self.family, self.table, self.chain,
-                statement
-        )
+        response = await self.cmd('insert', statement)
 
         try:
             self.handle = int(response.split('\n')[0].split('# handle ')[-1])
@@ -56,9 +57,7 @@ class Rule:
         else:
             statement = self.statement
 
-        response = await self.nft.cmd(
-                'add', 'rule', self.family, self.table, self.chain, statement
-        )
+        response = await self.cmd('add', statement)
 
         try:
             self.handle = int(response.split('# handle ')[-1])
@@ -71,10 +70,7 @@ class Rule:
         if not self.handle:
             raise RuntimeError("Rule not attached.")
 
-        await self.nft.cmd(
-                'delete', 'rule', self.family, self.table, self.chain,
-                'handle', str(self.handle)
-        )
+        await self.cmd('delete', 'handle', str(self.handle))
 
         self.handle = 0
 
@@ -84,7 +80,4 @@ class Rule:
         if not self.handle:
             raise RuntimeError("Rule not attached.")
 
-        await self.nft.cmd(
-                'replace', 'rule', self.family, self.table, self.chain,
-                'handle', str(self.handle), statement
-        )
+        await self.cmd('replace', 'handle', str(self.handle), statement)
