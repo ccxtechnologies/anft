@@ -36,13 +36,10 @@ class Chain:
                 await self.nft.cmd(
                         'flush', 'chain', self.family, self.table, self.name
                 )
-                await self.nft.cmd('delete', 'table', self.family, self.name)
             except FileNotFoundError:
                 pass
 
-        await self.nft.cmd(
-                'create', 'chain', self.family, self.table, self.name
-        )
+        await self.nft.cmd('add', 'chain', self.family, self.table, self.name)
 
         self.initialized.set()
 

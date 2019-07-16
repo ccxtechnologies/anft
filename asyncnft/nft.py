@@ -2,6 +2,7 @@
 
 import asyncio
 import async_timeout
+import syslog
 
 
 def wait_intialized(func):
@@ -47,6 +48,8 @@ class Nft:
                 '--handle',
                 '--stateless',
                 '--interactive',
+                '--debug',
+                'netlink',
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -62,14 +65,7 @@ class Nft:
 
         retry = False
         async with self.lock:
-            self.nft.stdin.write(b'\n')
-
-            prompt = None
-            while prompt != self.PROMPT:
-                async with async_timeout.timeout(self.timeout):
-                    prompt = await self.nft.stdout.readline()
-
-            self.nft.stdin.write(' '.join(command).encode() + b'\n\n')
+            self.nft.stdin.write(' '.join(command).encode() + b'\n')
 
             prompt, echo, response, error, other = None, None, None, None, b''
 
@@ -82,7 +78,7 @@ class Nft:
                 cmd = command[0].encode()
 
             while (
-                    (prompt is None) or (echo is None)
+                    (echo is None) or (prompt is None)
                     or ((response is None) and (error is None))
             ):
                 try:
@@ -107,12 +103,17 @@ class Nft:
 
                 if status == self.PROMPT:
                     prompt = status
+
                 elif status.startswith(self.PROMPT[:-1]):
                     echo = status
+                    self.nft.stdin.write(b'\n')
+
                 elif status.startswith(cmd):
                     response = status
+
                 elif status.startswith(b'Error:'):
                     error = status
+
                 else:
                     other += status
 
@@ -124,8 +125,14 @@ class Nft:
 
             # Can remove this once we get a better
             # handle on what's going on
-            import syslog
             syslog.syslog(f"+++ Retrying Command: {command}")
+            syslog.syslog(
+                    "+++ "
+                    f"nft timeout: {' '.join(command).encode()}\n"
+                    f"prompt ==> {prompt}\necho ==> {echo}\n"
+                    f"response ==> {response}\nerror ==> {error}\n"
+                    f"other ==> {other}"
+            )
 
             return await self.cmd(*command, _recurse=_recurse + 1)
 
