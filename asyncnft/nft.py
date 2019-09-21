@@ -3,6 +3,7 @@
 import asyncio
 import async_timeout
 import syslog
+import signal
 
 
 def wait_intialized(func):
@@ -42,6 +43,11 @@ class Nft:
         self.initialized.set()
 
     async def _start_nft(self):
+        def _preexec_function():
+            # Ignore the SIGINT signal by setting the handler to the standard
+            # signal handler SIG_IGN.
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         self.nft = await asyncio.create_subprocess_exec(
                 '/sbin/nft',
                 '--echo',
@@ -51,14 +57,18 @@ class Nft:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 loop=self.loop,
+                preexec_fn=_preexec_function,
         )
 
     @wait_intialized
     async def cmd(self, *command, _recurse=0):
         """Send an nft command."""
 
-        if (self.nft is None) or (self.nft.returncode is not None):
-            raise RuntimeError("Nft isn't initialized or has stopped")
+        if self.nft is None:
+            raise RuntimeError("Nft isn't initialized.")
+
+        if self.nft.returncode is not None:
+            raise RuntimeError(f"Nft has stopped: {self.nft.returncode}")
 
         async with self.lock:
             self.nft.stdin.write(' '.join(command).encode() + b'\n')

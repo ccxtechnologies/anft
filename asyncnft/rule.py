@@ -77,7 +77,7 @@ class Rule:
     async def replace(self, statement):
         """Replace the rules statement."""
 
-        if not self.handle:
-            raise RuntimeError("Rule not attached.")
+        self.statement = statement
 
-        await self.cmd('replace', 'handle', str(self.handle), statement)
+        if self.handle:
+            await self.cmd('replace', 'handle', str(self.handle), statement)
