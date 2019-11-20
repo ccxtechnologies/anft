@@ -117,10 +117,10 @@ class Nft:
 
         if error is not None:
             if b'File exists' in error:
-                raise FileExistsError()
+                raise FileExistsError(' '.join(command))
 
             elif b'No such file or directory' in error:
-                raise FileNotFoundError()
+                raise FileNotFoundError(' '.join(command))
 
             else:
                 raise RuntimeError(f"{' '.join(command)} => {error.decode()}")
