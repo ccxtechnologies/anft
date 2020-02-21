@@ -1,9 +1,9 @@
-# Copyright: 2018-2019, CCX Technologies
+# Copyright: 2018-2020, CCX Technologies
 
 import asyncio
 import async_timeout
 import syslog
-import signal
+import os
 
 
 def wait_intialized(func):
@@ -43,11 +43,6 @@ class Nft:
         self.initialized.set()
 
     async def _start_nft(self):
-        def _preexec_function():
-            # Ignore the SIGINT signal by setting the handler to the standard
-            # signal handler SIG_IGN.
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-
         self.nft = await asyncio.create_subprocess_exec(
                 '/sbin/nft',
                 '--echo',
@@ -57,7 +52,7 @@ class Nft:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 loop=self.loop,
-                preexec_fn=_preexec_function,
+                preexec_fn=os.setpgrp
         )
 
     @wait_intialized
